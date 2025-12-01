@@ -14,6 +14,7 @@ RTMP music bot with secure web UI (Flask + Tailwind + Vue).
 """
 import os
 import json
+from pathlib import Path
 import secrets
 import threading
 from typing import Set
@@ -69,9 +70,7 @@ def load_config() -> dict:
 
 
 def save_config() -> None:
-    """
-    Persist current state (rtmp, ffmpeg_path, video, overlay, playlist) as JSON.
-    """
+    """Persist current state (rtmp, ffmpeg_path, video, overlay, playlist) as JSON."""
     with _config_lock:
         state = player_state.get_state()
         data = {
@@ -80,6 +79,11 @@ def save_config() -> None:
             "video_file": state.get("video_file"),
             "overlay_text": state.get("overlay_text"),
             "playlist": state.get("playlist") or [],
+            "audio_bitrate": state.get("audio_bitrate"),
+            "video_bitrate": state.get("video_bitrate"),
+            "maxrate": state.get("maxrate"),
+            "bufsize": state.get("bufsize"),
+            "video_fps": state.get("video_fps"),
         }
         try:
             with open(CONFIG_PATH, "w", encoding="utf-8") as f:
@@ -88,10 +92,11 @@ def save_config() -> None:
             print(f"[Config] Error saving config: {e}")
 
 
+            print(f"[Config] Error saving config: {e}")
+
+
 def apply_config(cfg: dict) -> None:
-    """
-    Apply loaded config to player_state on startup.
-    """
+    """Apply loaded config to player_state on startup."""
     if not cfg:
         return
     rtmp = cfg.get("rtmp_url")
@@ -110,6 +115,16 @@ def apply_config(cfg: dict) -> None:
         player_state.set_overlay_text(overlay)
     if playlist:
         player_state.load_playlist(playlist)
+
+    encoder_cfg = {
+        k: cfg.get(k)
+        for k in ("audio_bitrate", "video_bitrate", "maxrate", "bufsize", "video_fps")
+        if cfg.get(k) is not None
+    }
+    if encoder_cfg:
+        player_state.set_encoder_settings(encoder_cfg)
+
+
 
 
 @app.route("/")
@@ -227,6 +242,20 @@ def set_video():
     return jsonify({"ok": True, "video": path})
 
 
+@app.post("/encoder_settings")
+def encoder_settings():
+    if not _require_session():
+        return _unauthorized()
+    data = request.get_json(silent=True) or {}
+    allowed = ("audio_bitrate", "video_bitrate", "maxrate", "bufsize", "video_fps")
+    encoder_cfg = {k: data[k] for k in allowed if k in data}
+    if not encoder_cfg:
+        return jsonify({"detail": "no encoder settings provided"}), 400
+    player_state.set_encoder_settings(encoder_cfg)
+    save_config()
+    return jsonify({"ok": True, **encoder_cfg})
+
+
 @app.post("/overlay")
 def set_overlay():
     if not _require_session():
@@ -338,10 +367,14 @@ def list_audio_files():
     files = []
     if os.path.exists(UPLOAD_AUDIO_DIR):
         for name in sorted(os.listdir(UPLOAD_AUDIO_DIR)):
+            # hide dotfiles such as .gitignore from the UI
+            if name.startswith('.'):
+                continue
             full = os.path.join(UPLOAD_AUDIO_DIR, name)
             if os.path.isfile(full):
                 files.append({"name": name, "path": full})
     return jsonify({"files": files})
+
 
 
 @app.get("/files/video")
@@ -351,10 +384,60 @@ def list_video_files():
     files = []
     if os.path.exists(UPLOAD_VIDEO_DIR):
         for name in sorted(os.listdir(UPLOAD_VIDEO_DIR)):
+            if name.startswith('.'):
+                continue
             full = os.path.join(UPLOAD_VIDEO_DIR, name)
             if os.path.isfile(full):
                 files.append({"name": name, "path": full})
     return jsonify({"files": files})
+
+
+@app.post("/files/audio/delete")
+def delete_audio_file():
+    if not _require_session():
+        return _unauthorized()
+    data = request.get_json(silent=True) or {}
+    path = data.get("path")
+    if not path:
+        return jsonify({"detail": "path is required"}), 400
+
+    base = Path(UPLOAD_AUDIO_DIR).resolve()
+    target = Path(path)
+    try:
+        resolved = target.resolve()
+    except Exception:
+        return jsonify({"detail": "invalid path"}), 400
+
+    if base not in resolved.parents:
+        return jsonify({"detail": "forbidden"}), 403
+
+    if resolved.exists() and resolved.is_file():
+        resolved.unlink()
+    return jsonify({"ok": True})
+
+@app.post("/files/video/delete")
+def delete_video_file():
+    if not _require_session():
+        return _unauthorized()
+    data = request.get_json(silent=True) or {}
+    path = data.get("path")
+    if not path:
+        return jsonify({"detail": "path is required"}), 400
+
+    base = Path(UPLOAD_VIDEO_DIR).resolve()
+    target = Path(path)
+    try:
+        resolved = target.resolve()
+    except Exception:
+        return jsonify({"detail": "invalid path"}), 400
+
+    if base not in resolved.parents:
+        return jsonify({"detail": "forbidden"}), 403
+
+    if resolved.exists() and resolved.is_file():
+        resolved.unlink()
+    return jsonify({"ok": True})
+
 
 
 # ========== UPLOAD ROUTES (SESSION REQUIRED) ==========

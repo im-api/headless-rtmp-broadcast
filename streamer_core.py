@@ -61,6 +61,12 @@ class PlayerState:
         self.overlay_text: str = ""
         self.rtmp_url: str = default_rtmp
         self.ffmpeg_path: str = os.getenv("FFMPEG_PATH", "ffmpeg")
+        # encoder quality settings (UI-configurable)
+        self.audio_bitrate: str = "320k"
+        self.video_bitrate: str = "800k"
+        self.maxrate: str = "800k"
+        self.bufsize: str = "1600k"
+        self.video_fps: int = 24
 
         # ffmpeg encoder process (RTMP) and log reader
         self.encoder_proc: Optional[subprocess.Popen] = None
@@ -87,6 +93,9 @@ class PlayerState:
         # how many times ffmpeg failed in a row (non‑zero exit).
         # used to avoid hammering the RTMP server if it keeps rejecting us.
         self._consecutive_failures: int = 0
+        # timestamp of last user-initiated seek (monotonic)
+        self._recent_seek_time: float = 0.0
+
 
     # ---------- logging helpers ----------
 
@@ -350,21 +359,22 @@ class PlayerState:
             "ultrafast",
             "-tune",
             "zerolatency",
-            "-pix_fmt",
+                        "-pix_fmt",
             "yuv420p",
             "-r",
-            "24",
+            str(self.video_fps),
             "-c:a",
             "aac",
             "-b:a",
-            "320k",
+            self.audio_bitrate,
             "-b:v",
-            "800k",
+            self.video_bitrate,
             "-maxrate",
-            "800k",
+            self.maxrate,
             "-bufsize",
-            "1600k",
-            "-threads",
+            self.bufsize,
+            
+"-threads",
             "1",
             # Mapping
             "-map",
@@ -470,8 +480,7 @@ class PlayerState:
             self._audio_thread.start()
 
     def _pump_audio_loop(self) -> None:
-        """
-        Pump raw PCM from the audio decoder into the encoder stdin.
+        """Pump raw PCM from the audio decoder into the encoder stdin.
         This runs in a daemon thread.
         """
         while True:
@@ -495,14 +504,23 @@ class PlayerState:
             if not chunk:
                 # Decoder finished (end of track or failure)
                 with self.lock:
+                    # If EOF happens very shortly after a seek, treat it as
+                    # a failed seek rather than a natural end-of-track.
+                    recent_seek = False
+                    if getattr(self, "_recent_seek_time", 0.0):
+                        if time.monotonic() - self._recent_seek_time < 2.0:
+                            recent_seek = True
                     natural_end = (
                         not self._stop_audio_pump
                         and self.status == "playing"
                         and self.playlist
+                        and not recent_seek
                     )
                 if natural_end:
                     with self.lock:
                         self._advance_track_unlocked()
+                # whether natural or not, stop this pump loop; a new one
+                # will be started by the pipeline if needed
                 break
 
             try:
@@ -511,6 +529,9 @@ class PlayerState:
             except BrokenPipeError:
                 # Encoder died or RTMP closed
                 break
+            except BrokenPipeError:
+                    # Encoder died or RTMP closed
+                    break
 
     def _start_pipeline_unlocked(self, start_sec: float = 0.0) -> None:
         """
@@ -709,11 +730,25 @@ class PlayerState:
         if seconds < 0:
             seconds = 0.0
         with self.lock:
+            # Clamp to known duration of current track (if available)
+            duration = None
+            if self.playlist and 0 <= self.current_index < len(self.playlist):
+                key = str(self.playlist[self.current_index])
+                d = self.track_durations.get(key)
+                if isinstance(d, (int, float)) and d > 0:
+                    duration = float(d)
+            if duration is not None and seconds >= duration:
+                # Avoid seeking past EOF which would cause the decoder to finish immediately
+                seconds = max(duration - 1.0, 0.0)
+
             self._append_log(f"Seek requested to {seconds} seconds")
             self.position_sec = seconds
+            # Mark for pump loop so first EOF after a seek isn't treated as natural end
+            self._recent_seek_time = time.monotonic()
             if self.status == "playing":
                 self._start_pipeline_unlocked(seconds)
             # if paused/stopped, we just store new position
+
 
     def _get_position_unlocked(self) -> float:
         """
@@ -747,12 +782,49 @@ class PlayerState:
                 "overlay_text": self.overlay_text,
                 "rtmp_url": self.rtmp_url,
                 "ffmpeg_path": self.ffmpeg_path,
+                "audio_bitrate": self.audio_bitrate,
+                "video_bitrate": self.video_bitrate,
+                "maxrate": self.maxrate,
+                "bufsize": self.bufsize,
+                "video_fps": self.video_fps,
             }
 
+    def set_encoder_settings(self, cfg: dict) -> None:
+    # Update encoder quality settings from a dict.
+        with self.lock:
+            val = cfg.get("audio_bitrate")
+            if val:
+                self.audio_bitrate = str(val)
+
+            val = cfg.get("video_bitrate")
+            if val:
+                self.video_bitrate = str(val)
+
+            val = cfg.get("maxrate")
+            if val:
+                self.maxrate = str(val)
+
+            val = cfg.get("bufsize")
+            if val:
+                self.bufsize = str(val)
+
+            if "video_fps" in cfg:
+                try:
+                    self.video_fps = int(cfg["video_fps"])
+                except (TypeError, ValueError):
+                    pass
+
+            self._append_log(
+                f"Encoder settings updated: "
+                f"audio={self.audio_bitrate}, video={self.video_bitrate}, "
+                f"maxrate={self.maxrate}, bufsize={self.bufsize}, "
+                f"fps={self.video_fps}"
+            )
+
     def watcher_loop(self) -> None:
-        """
-        Background loop: watches the encoder process. If ffmpeg dies while
-        we are in 'playing' state, mark status=error so the UI can show it.
+        """Background loop watching the encoder process.
+        If ffmpeg dies while playing, try to restart the pipeline
+        automatically from the current position instead of staying in error.
         """
         self._append_log("Watcher loop started")
         while not self.stop_flag:
@@ -768,10 +840,28 @@ class PlayerState:
                         self._kill_audio_unlocked()
                         self.encoder_proc = None
                         self._encoder_log_thread = None
+
                         if ret == 0:
+                            # clean exit => stop
                             self.status = "stopped"
                         else:
-                            self.status = "error"
+                            has_playlist = bool(self.playlist)
+                            if has_playlist and not self.stop_flag:
+                                start_sec = self._get_position_unlocked()
+                                self._append_log(
+                                    "Encoder failed; attempting automatic restart "
+                                    f"from ~{start_sec:.1f}s"
+                                )
+                                try:
+                                    self._restart_full_pipeline_unlocked(start_sec)
+                                    self.status = "playing"
+                                except Exception as e:
+                                    self._append_log(
+                                        f"Automatic restart failed: {e!r}"
+                                    )
+                                    self.status = "error"
+                            else:
+                                self.status = "error"
             time.sleep(1.0)
 
 
