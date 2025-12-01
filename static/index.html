@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>RTMP Music Bot – Control Room</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Tailwind via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Vue 3 via CDN -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <style>
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        radial-gradient(circle at 0% 0%, rgba(56,189,248,0.14), transparent 55%),
+        radial-gradient(circle at 100% 100%, rgba(129,140,248,0.18), transparent 55%);
+      opacity: 0.9;
+      mix-blend-mode: screen;
+      z-index: -1;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-slate-100 antialiased">
+  <div id="app" class="max-w-6xl mx-auto px-4 py-6 md:py-10 space-y-6">
+    <!-- Top brand bar -->
+    <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="h-10 w-10 rounded-2xl bg-gradient-to-br from-indigo-400 via-sky-400 to-emerald-400 flex items-center justify-center shadow-lg shadow-indigo-900/60 ring-2 ring-indigo-300/40">
+          <span class="text-xl">🎛️</span>
+        </div>
+        <div>
+          <h1 class="text-2xl md:text-3xl font-semibold tracking-tight flex items-center gap-2">
+            RTMP Music Bot
+            <span class="text-[11px] uppercase tracking-[0.25em] text-indigo-300 bg-indigo-500/15 border border-indigo-400/30 rounded-full px-2 py-0.5">
+              Control Room
+            </span>
+          </h1>
+          <p class="text-xs md:text-sm text-slate-300 mt-1 max-w-xl">
+            Headless 24/7 music streamer with full RTMP control, playlist queue,
+            and live logs – all in a single glassy dashboard.
+          </p>
+        </div>
+      </div>
+
+      <div v-if="isLoggedIn" class="flex flex-col items-start md:items-end gap-1 text-xs">
+        <div class="inline-flex items-center gap-2 rounded-full px-3 py-1 bg-emerald-400/10 border border-emerald-300/40 backdrop-blur-md">
+          <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span class="font-medium text-emerald-200">Admin session active</span>
+        </div>
+        <button
+          @click="logout"
+          class="text-[11px] text-slate-300 hover:text-rose-300 underline decoration-dotted"
+        >
+          Logout
+        </button>
+      </div>
+    </header>
+
+    <!-- LOGIN VIEW -->
+    <section v-if="!isLoggedIn" class="grid lg:grid-cols-2 gap-6 items-stretch">
+      <div class="relative overflow-hidden rounded-3xl bg-white/5 border border-white/10 backdrop-blur-2xl shadow-xl shadow-black/40 p-6 md:p-8 flex flex-col justify-between">
+        <div>
+          <h2 class="text-lg md:text-xl font-semibold mb-4 flex items-center gap-2">
+            <span class="text-indigo-200">Secure Admin Login</span>
+            <span class="text-[10px] uppercase tracking-[0.2em] text-slate-300 bg-slate-900/60 border border-slate-500/30 rounded-full px-2 py-0.5">
+              Required
+            </span>
+          </h2>
+          <div class="space-y-4 text-sm">
+            <div>
+              <label class="block text-[11px] uppercase tracking-[0.2em] text-slate-300 mb-1">
+                Username
+              </label>
+              <input
+                v-model="loginForm.username"
+                type="text"
+                class="w-full rounded-xl bg-slate-950/60 border border-slate-600/60 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/70 focus:border-indigo-300/70 shadow-inner shadow-black/40"
+                placeholder="admin"
+              />
+            </div>
+            <div>
+              <label class="block text-[11px] uppercase tracking-[0.2em] text-slate-300 mb-1">
+                Password
+              </label>
+              <input
+                v-model="loginForm.password"
+                type="password"
+                class="w-full rounded-xl bg-slate-950/60 border border-slate-600/60 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/70 focus:border-indigo-300/70 shadow-inner shadow-black/40"
+                placeholder="••••••••"
+              />
+            </div>
+          </div>
+        </div>
+        <div class="mt-6 space-y-2 text-xs">
+          <button
+            @click="login"
+            class="w-full rounded-2xl bg-gradient-to-r from-indigo-500 via-sky-500 to-emerald-500 hover:from-indigo-400 hover:via-sky-400 hover:to-emerald-400 px-4 py-2.5 text-sm font-semibold shadow-lg shadow-indigo-900/60 transition-transform hover:-translate-y-0.5"
+          >
+            Enter Control Room
+          </button>
+          <p class="text-slate-300">
+            Credentials are loaded from
+            <code class="text-sky-300">.env</code> on the server.
+          </p>
+          <p v-if="loginStatus" class="mt-1" :class="loginStatusError ? 'text-rose-300' : 'text-emerald-300'">
+            {{ loginStatus }}
+          </p>
+        </div>
+        <div class="pointer-events-none absolute -top-10 -right-16 h-40 w-40 bg-emerald-400/10 rounded-full blur-3xl"></div>
+        <div class="pointer-events-none absolute -bottom-16 -left-10 h-48 w-48 bg-indigo-500/20 rounded-full blur-3xl"></div>
+      </div>
+
+      <div class="rounded-3xl bg-slate-900/40 border border-white/10 backdrop-blur-2xl shadow-xl shadow-black/40 p-6 md:p-8 flex flex-col justify-between space-y-4">
+        <div class="space-y-3 text-sm text-slate-200">
+          <h3 class="font-semibold text-slate-50 flex items-center gap-2">
+            <span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-indigo-500/70 text-[11px]">i</span>
+            What this bot does
+          </h3>
+          <ul class="space-y-2 text-slate-300 text-xs md:text-sm">
+            <li class="flex gap-2">
+              <span class="mt-1 h-1 w-3 rounded-full bg-emerald-400"></span>
+              <span>Stream a local playlist to any RTMP endpoint (YouTube, Twitch, Restream…)</span>
+            </li>
+            <li class="flex gap-2">
+              <span class="mt-1 h-1 w-3 rounded-full bg-sky-400"></span>
+              <span>Loop a custom background video while music plays in perfect sync.</span>
+            </li>
+            <li class="flex gap-2">
+              <span class="mt-1 h-1 w-3 rounded-full bg-indigo-400"></span>
+              <span>Drag-and-drop queue, click a track to jump instantly, and monitor logs live.</span>
+            </li>
+            <li class="flex gap-2">
+              <span class="mt-1 h-1 w-3 rounded-full bg-amber-400"></span>
+              <span>Configuration is persisted to JSON, so your stream comes back exactly as you left it.</span>
+            </li>
+          </ul>
+        </div>
+        <div class="text-[11px] text-slate-400">
+          Tip: on Windows, point
+          <code class="text-sky-300">FFMPEG_PATH</code> and
+          <code class="text-sky-300">FFPROBE_PATH</code>
+          in <code class="text-sky-300">.env</code> to your ffmpeg/ffprobe binaries.
+        </div>
+      </div>
+    </section>
+
+    <!-- MAIN DASHBOARD -->
+    <section v-else class="space-y-5">
+      <!-- Top layout: playback & quick glance -->
+      <div class="grid xl:grid-cols-3 gap-4">
+        
+      <!-- Glass playback card -->
+        <div class="xl:col-span-2 relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-700 via-slate-900 to-slate-950 border border-indigo-400/30 shadow-2xl shadow-black/60 p-6 md:p-10 flex flex-col gap-6">
+          <div class="pointer-events-none absolute -left-24 -top-32 h-64 w-64 rounded-full bg-emerald-400/20 blur-3xl"></div>
+          <div class="pointer-events-none absolute -right-16 -bottom-40 h-72 w-72 rounded-full bg-violet-500/25 blur-3xl"></div>
+
+          <div class="relative z-10 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div class="text-[11px] uppercase tracking-[0.3em] text-indigo-200/80">
+                Focus Stream
+              </div>
+              <h2 class="mt-2 text-2xl md:text-3xl font-semibold tracking-tight text-slate-50">
+                Custom RTMP Mix
+              </h2>
+              <p class="mt-1 text-xs md:text-sm text-slate-200/90 max-w-xl">
+                Headless 24/7 streaming of your own playlists to any RTMP endpoint – tuned for deep focus, sleep or chill.
+              </p>
+            </div>
+            <div class="flex flex-col items-end gap-2 text-right text-[11px]">
+              <div class="uppercase tracking-[0.25em] text-[10px] text-slate-300">
+                Status
+              </div>
+              <span
+                class="inline-flex items-center gap-1 rounded-full px-3 py-1 border text-[11px] bg-slate-950/40"
+                :class="statusPillClass"
+              >
+                <span class="h-1.5 w-1.5 rounded-full" :class="statusDotClass"></span>
+                {{ state.status || 'idle' }}
+              </span>
+              <div class="mt-1 max-w-xs">
+                <div class="uppercase tracking-[0.18em] text-[9px] text-slate-300">
+                  RTMP Target
+                </div>
+                <div class="text-[11px] text-slate-100 truncate" :title="rtmp">
+                  {{ rtmp || 'not configured' }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="relative z-10 mt-6 grid md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-8 items-stretch">
+            <!-- Left: artwork + now playing -->
+            <div class="flex flex-col justify-between gap-6">
+              <div class="relative rounded-3xl bg-slate-950/40 border border-indigo-300/20 shadow-lg shadow-black/40 p-5 flex items-center gap-4">
+                <div class="h-16 w-16 md:h-20 md:w-20 rounded-2xl bg-gradient-to-br from-emerald-400 via-sky-400 to-indigo-500 flex items-center justify-center shadow-lg shadow-emerald-900/60">
+                  <span class="text-2xl">🎧</span>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-[11px] uppercase tracking-[0.2em] text-slate-300">
+                    Now Playing
+                  </div>
+                  <div class="mt-1 text-sm md:text-base text-sky-100 truncate" :title="currentTrackDisplay">
+                    {{ currentTrackDisplay || "No track selected yet" }}
+                  </div>
+                  <div class="mt-1 text-[11px] text-slate-300">
+                    Video loop:
+                    <span v-if="video" class="text-indigo-200">{{ basename(video) }}</span>
+                    <span v-else class="text-slate-500">none selected</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="text-[11px] text-slate-200/85 max-w-md">
+                Overlay text sent to ffmpeg:
+                <span class="block mt-1 text-[11px] text-amber-100/90 truncate" :title="overlay">
+                  {{ overlay || "Set an overlay message in the panel on the right." }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Right: timer, time bar, controls -->
+            <div class="flex flex-col items-center justify-center gap-4">
+              <div class="text-[11px] uppercase tracking-[0.35em] text-slate-200/80">
+                Increasing focus…
+              </div>
+              <div class="text-5xl md:text-6xl font-semibold tracking-tight text-white">
+                {{ formattedPosition }}
+              </div>
+              <div class="text-xs text-slate-200/90">
+                / {{ durationLabel }}
+              </div>
+
+              <div class="w-full max-w-md mt-4 space-y-2">
+                <div class="flex items-center justify-between text-[11px] text-slate-200/90">
+                  <span class="font-mono">{{ formattedPosition }}</span>
+                  <span class="font-mono">{{ durationLabel }}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  :max="timeBarMax || Math.max(seekSlider, 1)"
+                  step="1"
+                  v-model.number="seekSlider"
+                  @mousedown="seeking = true"
+                  @mouseup="commitSeek"
+                  @touchstart="seeking = true"
+                  @touchend="commitSeek"
+                  class="w-full accent-emerald-400"
+                />
+              </div>
+
+              <div class="mt-5 flex items-center justify-center gap-4">
+                <button
+                  @click="send('/stop')"
+                  class="h-10 w-10 rounded-full bg-slate-950/70 border border-slate-600/70 flex items-center justify-center text-xs text-slate-200 hover:bg-slate-900 hover:border-slate-300/80 transition"
+                >
+                  ⏹
+                </button>
+                <button
+                  @click="send('/play')"
+                  class="h-14 w-14 rounded-full bg-emerald-400 text-slate-950 flex items-center justify-center text-lg shadow-lg shadow-emerald-900/60 hover:bg-emerald-300 transition-transform hover:-translate-y-0.5"
+                >
+                  ▶
+                </button>
+                <button
+                  @click="send('/pause')"
+                  class="h-10 w-10 rounded-full bg-slate-950/70 border border-slate-600/70 flex items-center justify-center text-xs text-slate-200 hover:bg-slate-900 hover:border-slate-300/80 transition"
+                >
+                  ⏸
+                </button>
+                <button
+                  @click="send('/skip')"
+                  class="h-10 w-10 rounded-full bg-violet-500/90 text-slate-50 flex items-center justify-center text-xs shadow-md shadow-violet-900/60 hover:bg-violet-400 transition-transform hover:-translate-y-0.5"
+                >
+                  ⏭
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+<!-- Quick config card -->
+        <div class="rounded-3xl bg-slate-900/50 border border-white/10 backdrop-blur-2xl shadow-xl shadow-black/40 p-4 md:p-5 flex flex-col gap-4">
+          <div>
+            <h2 class="text-sm font-semibold text-slate-50 mb-1">
+              Connection & Encoder
+            </h2>
+            <p class="text-[11px] text-slate-300">
+              Point the bot to your RTMP server and ffmpeg binaries.
+            </p>
+          </div>
+
+          <div class="space-y-3 text-[11px]">
+            <div>
+              <label class="block text-[10px] uppercase tracking-[0.18em] text-slate-400 mb-1">
+                RTMP URL
+              </label>
+              <input
+                v-model="rtmp"
+                @focus="editing.rtmp = true"
+                @blur="editing.rtmp = false"
+                type="text"
+                class="w-full rounded-xl bg-slate-950/70 border border-slate-600/70 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400/70 focus:border-indigo-300/70"
+                placeholder="rtmp://server/app/streamkey"
+              />
+              <button
+                @click="setRTMP"
+                class="mt-2 w-full rounded-xl bg-indigo-500/90 hover:bg-indigo-400 px-3 py-2 text-[11px] font-semibold shadow-md shadow-indigo-900/40"
+              >
+                Save RTMP
+              </button>
+            </div>
+
+            <div>
+              <label class="block text-[10px] uppercase tracking-[0.18em] text-slate-400 mb-1">
+                ffmpeg Path
+              </label>
+              <input
+                v-model="ffmpegPath"
+                @focus="editing.ffmpeg = true"
+                @blur="editing.ffmpeg = false"
+                type="text"
+                class="w-full rounded-xl bg-slate-950/70 border border-slate-600/70 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-sky-400/70 focus:border-sky-300/70"
+                placeholder="F:/ffmpeg/bin/ffmpeg.exe or ffmpeg"
+              />
+              <button
+                @click="setFFMPEG"
+                class="mt-2 w-full rounded-xl bg-sky-500/90 hover:bg-sky-400 px-3 py-2 text-[11px] font-semibold shadow-md shadow-sky-900/40"
+              >
+                Save ffmpeg Path
+              </button>
+            </div>
+          </div>
+
+          <div class="pt-2 border-t border-white/10 mt-auto">
+            <h3 class="text-[11px] font-semibold text-slate-200 mb-1">
+              On-screen overlay
+            </h3>
+            <textarea
+              v-model="overlay"
+              @focus="editing.overlay = true"
+              @blur="editing.overlay = false"
+              rows="3"
+              class="w-full rounded-xl bg-slate-950/70 border border-slate-600/70 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/70 focus:border-amber-300/70"
+              placeholder="Now playing: Chill Focus Mix #01"
+            ></textarea>
+            <button
+              @click="setOverlay"
+              class="mt-2 w-full rounded-xl bg-amber-400/90 hover:bg-amber-300 px-3 py-2 text-[11px] font-semibold text-slate-900 shadow-md shadow-amber-900/40"
+            >
+              Update overlay
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Middle row: uploads & video info -->
+      <div class="grid md:grid-cols-3 gap-4">
+        <!-- Upload audio -->
+        <div class="rounded-3xl bg-slate-900/60 border border-white/10 backdrop-blur-2xl shadow-xl shadow-black/40 p-4 flex flex-col gap-3">
+          <div>
+            <h2 class="text-sm font-semibold text-slate-50">
+              Upload tracks
+            </h2>
+            <p class="text-[11px] text-slate-300">
+              Add audio files to your server library and append them to the queue.
+            </p>
+          </div>
+          <input
+            ref="audioFiles"
+            type="file"
+            multiple
+            accept="audio/*"
+            class="block w-full text-xs text-slate-200 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-500/90 file:text-white hover:file:bg-indigo-400"
+          />
+          <button
+            @click="uploadAudioFiles"
+            class="mt-1 w-full rounded-xl bg-indigo-500/90 hover:bg-indigo-400 px-3 py-2 text-[11px] font-semibold shadow-md shadow-indigo-900/50"
+          >
+            Upload & append to playlist
+          </button>
+          <p class="text-[11px] text-slate-400 mt-auto">
+            Stored under <code class="text-sky-300">uploads/audio</code>.
+          </p>
+        </div>
+
+        <!-- Upload video -->
+        <div class="rounded-3xl bg-slate-900/60 border border-white/10 backdrop-blur-2xl shadow-xl shadow-black/40 p-4 flex flex-col gap-3">
+          <div>
+            <h2 class="text-sm font-semibold text-slate-50">
+              Upload loop video
+            </h2>
+            <p class="text-[11px] text-slate-300">
+              Choose the visual background that will loop under your music.
+            </p>
+          </div>
+          <input
+            ref="videoFile"
+            type="file"
+            accept="video/*"
+            class="block w-full text-xs text-slate-200 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-pink-500/90 file:text-white hover:file:bg-pink-400"
+          />
+          <button
+            @click="uploadVideoFile"
+            class="mt-1 w-full rounded-xl bg-pink-500/90 hover:bg-pink-400 px-3 py-2 text-[11px] font-semibold shadow-md shadow-pink-900/50"
+          >
+            Upload & set as loop
+          </button>
+          <p class="text-[11px] text-slate-400">
+            Stored under <code class="text-sky-300">uploads/video</code>.
+          </p>
+          <p v-if="video" class="text-[11px] text-slate-300 truncate mt-auto" :title="video">
+            Current: {{ video }}
+          </p>
+        </div>
+
+        <!-- Library mini view -->
+        <div class="rounded-3xl bg-slate-900/60 border border-white/10 backdrop-blur-2xl shadow-xl shadow-black/40 p-4 flex flex-col gap-3">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-sm font-semibold text-slate-50">Library overview</h2>
+              <p class="text-[11px] text-slate-300">
+                Quick peek into your uploaded audio & video files.
+              </p>
+            </div>
+            <button
+              @click="refreshFiles"
+              class="text-[11px] px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-600/60"
+            >
+              ⟳
+            </button>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-[11px] flex-1 overflow-hidden">
+            <div class="flex flex-col min-h-[120px]">
+              <div class="uppercase tracking-[0.16em] text-[10px] text-slate-400 mb-1">
+                Audio
+              </div>
+              <div class="flex-1 overflow-auto space-y-1 pr-1">
+                <div
+                  v-if="audioFilesList.length === 0"
+                  class="text-slate-500 italic"
+                >
+                  No audio files yet.
+                </div>
+                <div
+                  v-for="f in audioFilesList.slice(0,6)"
+                  :key="f.path"
+                  class="flex items-center justify-between gap-2 rounded-lg bg-slate-950/70 px-2 py-1 hover:bg-slate-900/70 cursor-pointer"
+                >
+                  <div class="truncate" :title="f.path">
+                    {{ f.name }}
+                  </div>
+                  <button
+                    @click.stop="appendToPlaylist(f.path)"
+                    class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px]"
+                  >
+                    + Queue
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="flex flex-col min-h-[120px]">
+              <div class="uppercase tracking-[0.16em] text-[10px] text-slate-400 mb-1">
+                Video
+              </div>
+              <div class="flex-1 overflow-auto space-y-1 pr-1">
+                <div
+                  v-if="videoFilesList.length === 0"
+                  class="text-slate-500 italic"
+                >
+                  No video files yet.
+                </div>
+                <div
+                  v-for="f in videoFilesList.slice(0,4)"
+                  :key="f.path"
+                  class="flex items-center justify-between gap-2 rounded-lg bg-slate-950/70 px-2 py-1 hover:bg-slate-900/70 cursor-pointer"
+                >
+                  <div class="truncate" :title="f.path">
+                    {{ f.name }}
+                  </div>
+                  <button
+                    @click.stop="setVideoFromFile(f.path)"
+                    class="px-1.5 py-0.5 rounded bg-pink-500/90 hover:bg-pink-400 text-[10px]"
+                  >
+                    Set loop
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="text-[11px] text-slate-400">
+            Full file lists are still available in the bottom Library/Queue section.
+          </p>
+        </div>
+      </div>
+
+      <!-- Bottom row: full library + queue + logs/state -->
+      <div class="grid lg:grid-cols-3 gap-4">
+        <!-- Full library -->
+        <div class="rounded-3xl bg-slate-900/70 border border-white/10 backdrop-blur-2xl shadow-xl shadow-black/40 p-4 flex flex-col">
+          <div class="flex items-center justify-between mb-2">
+            <h2 class="text-sm font-semibold text-slate-50">
+              Library
+            </h2>
+            <button
+              @click="refreshFiles"
+              class="text-[11px] px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-600/60"
+            >
+              ⟳
+            </button>
+          </div>
+          <div class="flex-1 grid grid-rows-2 gap-3 text-[11px] overflow-hidden">
+            <div class="flex flex-col min-h-[120px]">
+              <div class="uppercase tracking-[0.16em] text-[10px] text-slate-400 mb-1">
+                Audio files
+              </div>
+              <div class="flex-1 overflow-auto space-y-1 pr-1">
+                <div
+                  v-if="audioFilesList.length === 0"
+                  class="text-slate-500 italic"
+                >
+                  No audio files yet.
+                </div>
+                <div
+                  v-for="f in audioFilesList"
+                  :key="f.path"
+                  class="flex items-center justify-between gap-2 rounded-lg bg-slate-950/70 px-2 py-1 hover:bg-slate-900/70 cursor-pointer"
+                >
+                  <div class="truncate" :title="f.path">
+                    {{ f.name }}
+                  </div>
+                  <button
+                    @click.stop="appendToPlaylist(f.path)"
+                    class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px]"
+                  >
+                    + Queue
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="flex flex-col min-h-[120px]">
+              <div class="uppercase tracking-[0.16em] text-[10px] text-slate-400 mb-1">
+                Video files
+              </div>
+              <div class="flex-1 overflow-auto space-y-1 pr-1">
+                <div
+                  v-if="videoFilesList.length === 0"
+                  class="text-slate-500 italic"
+                >
+                  No video files yet.
+                </div>
+                <div
+                  v-for="f in videoFilesList"
+                  :key="f.path"
+                  class="flex items-center justify-between gap-2 rounded-lg bg-slate-950/70 px-2 py-1 hover:bg-slate-900/70 cursor-pointer"
+                >
+                  <div class="truncate" :title="f.path">
+                    {{ f.name }}
+                  </div>
+                  <button
+                    @click.stop="setVideoFromFile(f.path)"
+                    class="px-1.5 py-0.5 rounded bg-pink-500/90 hover:bg-pink-400 text-[10px]"
+                  >
+                    Set loop
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="mt-2 text-[11px] text-slate-400">
+            These are physical files on disk; paths are sent directly into the playlist & video loop.
+          </p>
+        </div>
+
+        <!-- Queue with drag-and-drop -->
+        <div class="rounded-3xl bg-white/5 border border-white/10 backdrop-blur-2xl shadow-xl shadow-black/40 p-4 flex flex-col">
+          <div class="flex items-center justify-between mb-2">
+            <div>
+              <h2 class="text-sm font-semibold text-slate-50">Queue</h2>
+              <p class="text-[11px] text-slate-300">
+                Drag to reorder; click a row to jump straight to that track.
+              </p>
+            </div>
+            <button
+              @click="savePlaylistOrder"
+              class="text-[11px] px-3 py-1.5 rounded-xl bg-sky-500/90 hover:bg-sky-400 shadow-md shadow-sky-900/50"
+            >
+              Save order
+            </button>
+          </div>
+          <div class="flex-1 overflow-auto rounded-2xl border border-white/10 bg-slate-950/70 text-[11px]">
+            <div
+              v-if="playlistOrder.length === 0"
+              class="p-3 text-slate-500 italic"
+            >
+              Playlist is empty. Add tracks from the Library or Upload panel.
+            </div>
+            <div
+              v-for="(p, idx) in playlistOrder"
+              :key="p + '-' + idx"
+              class="flex items-center gap-2 px-3 py-2 border-b border-slate-900 last:border-b-0"
+              :class="{
+                'bg-slate-900/80': idx === state.current_track_index,
+                'hover:bg-slate-900/60 cursor-pointer': idx !== state.current_track_index
+              }"
+              draggable="true"
+              @dragstart="onDragStart(idx)"
+              @dragover.prevent
+              @drop="onDrop(idx)"
+              @click="playIndex(idx)"
+            >
+              <div class="flex items-center gap-2 w-8 shrink-0 text-slate-400">
+                <span
+                  class="h-3 w-3 rounded-full border"
+                  :class="idx === state.current_track_index ? 'border-emerald-400 bg-emerald-500/70' : 'border-slate-600 bg-slate-900'"
+                ></span>
+                <span class="text-[10px] font-mono">{{ idx + 1 }}</span>
+              </div>
+              <div class="flex-1 truncate">
+                <div class="truncate" :title="p">
+                  {{ basename(p) }}
+                </div>
+                <div class="text-[10px] text-slate-500">
+                  {{ dirnameShort(p) }}
+                </div>
+              </div>
+              <div class="w-14 text-right text-[10px] text-slate-300 font-mono">
+                {{ formatDuration(trackDurations[idx]) }}
+              </div>
+              <div class="w-6 text-right text-slate-500 cursor-grab select-none">
+                ☰
+              </div>
+            </div>
+          </div>
+          <p class="mt-2 text-[11px] text-slate-400">
+            Queue ordering and playlist are persisted to JSON so you can restart the bot without losing your setup.
+          </p>
+        </div>
+
+        <!-- State & logs -->
+        <div class="rounded-3xl bg-slate-900/70 border border-white/10 backdrop-blur-2xl shadow-xl shadow-black/40 p-4 flex flex-col">
+          <div class="flex items-center justify-between mb-2">
+            <div>
+              <h2 class="text-sm font-semibold text-slate-50">State & logs</h2>
+              <p class="text-[11px] text-slate-300">
+                Live backend state and ffmpeg output snapshot.
+              </p>
+            </div>
+            <div class="flex gap-1">
+              <button
+                @click="refreshState"
+                class="text-[11px] px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-600/60"
+              >
+                ⟳ State
+              </button>
+              <button
+                @click="refreshLogs"
+                class="text-[11px] px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-600/60"
+              >
+                ⟳ Logs
+              </button>
+            </div>
+          </div>
+          <div class="flex-1 grid grid-rows-2 gap-2 min-h-[220px]">
+            <pre class="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3 text-[11px] overflow-auto text-slate-200">
+{{ prettyState }}
+            </pre>
+            <pre class="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3 text-[11px] overflow-auto text-slate-200">
+{{ logsText }}
+            </pre>
+          </div>
+          <p class="mt-2 text-[11px] text-slate-400">
+            Logs are trimmed to the most recent entries to keep memory and CPU usage predictable.
+          </p>
+        </div>
+      </div>
+    </section>
+
+<script>
+    const { createApp, computed } = Vue;
+
+    createApp({
+      data() {
+        return {
+          token: localStorage.getItem("musicbot_session_token") || "",
+          loginForm: {
+            username: "",
+            password: "",
+          },
+          loginStatus: "",
+          loginStatusError: false,
+
+          // Editing flags to avoid overwriting fields while user types
+          editing: {
+            rtmp: false,
+            ffmpeg: false,
+            overlay: false,
+            playlist: false,
+          },
+
+          // Config fields
+          rtmp: "",
+          ffmpegPath: "",
+          video: "",
+          overlay: "",
+
+          // Playlist visual order & durations
+          playlistOrder: [],
+          trackDurations: [],
+
+          // Fetched player state
+          state: {},
+
+          // Logs
+          logs: [],
+
+          // File manager lists
+          audioFilesList: [],
+          videoFilesList: [],
+
+          // Time bar / seek
+          seekSlider: 0,
+          timeBarMax: 0,
+          seeking: false,
+
+          // DnD
+          dragIndex: null,
+
+          _pollTimer: null,
+        };
+      },
+      computed: {
+        isLoggedIn() {
+          return !!this.token;
+        },
+        prettyState() {
+          return Object.keys(this.state).length
+            ? JSON.stringify(this.state, null, 2)
+            : "No state yet.";
+        },
+        logsText() {
+          return this.logs.length ? this.logs.join("\n") : "No logs yet.";
+        },
+        statusPillClass() {
+          const s = (this.state.status || "").toLowerCase();
+          if (s === "playing") {
+            return "border-emerald-500/60 bg-emerald-500/10 text-emerald-200";
+          }
+          if (s === "paused") {
+            return "border-amber-500/60 bg-amber-500/10 text-amber-200";
+          }
+          if (s === "stopped") {
+            return "border-slate-500/60 bg-slate-500/10 text-slate-200";
+          }
+          return "border-slate-600 bg-slate-800 text-slate-300";
+        },
+        statusDotClass() {
+          const s = (this.state.status || "").toLowerCase();
+          if (s === "playing") return "bg-emerald-400";
+          if (s === "paused") return "bg-amber-400";
+          if (s === "stopped") return "bg-slate-400";
+          return "bg-slate-500";
+        },
+        currentTrackDisplay() {
+          const idx = this.state.current_track_index || 0;
+          if (!this.playlistOrder || !this.playlistOrder.length) return "";
+          const p = this.playlistOrder[idx];
+          if (!p) return "";
+          return this.basename(p);
+        },
+        formattedPosition() {
+          const sec = Math.floor(this.state.position_sec || 0);
+          const m = Math.floor(sec / 60);
+          const s = sec % 60;
+          return `${m}:${s.toString().padStart(2, "0")}`;
+        },
+        currentDurationSec() {
+          const idx = this.state.current_track_index || 0;
+          if (!this.trackDurations || idx < 0 || idx >= this.trackDurations.length) {
+            return null;
+          }
+          const d = this.trackDurations[idx];
+          return typeof d === "number" && !isNaN(d) && d > 0 ? d : null;
+        },
+        durationLabel() {
+          const d = this.currentDurationSec;
+          if (!d) return "--:--";
+          return this.formatDuration(d);
+        },
+      },
+      methods: {
+        basename(p) {
+          if (!p) return "";
+          const parts = p.split(/[/\\]/);
+          return parts[parts.length - 1];
+        },
+        dirnameShort(p) {
+          if (!p) return "";
+          const parts = p.split(/[/\\]/);
+          if (parts.length <= 1) return "";
+          return parts.slice(0, -1).join("/") || "";
+        },
+        formatDuration(sec) {
+          if (!sec || isNaN(sec) || sec <= 0) return "--:--";
+          sec = Math.floor(sec);
+          const m = Math.floor(sec / 60);
+          const s = sec % 60;
+          return `${m}:${s.toString().padStart(2, "0")}`;
+        },
+        apiHeaders(json = true) {
+          const h = {};
+          if (json) h["Content-Type"] = "application/json";
+          if (this.token) h["Authorization"] = "Bearer " + this.token;
+          return h;
+        },
+        saveToken(t) {
+          this.token = t || "";
+          if (t) {
+            localStorage.setItem("musicbot_session_token", t);
+          } else {
+            localStorage.removeItem("musicbot_session_token");
+          }
+        },
+        async login() {
+          this.loginStatus = "";
+          this.loginStatusError = false;
+          if (!this.loginForm.username || !this.loginForm.password) {
+            this.loginStatus = "Enter username and password.";
+            this.loginStatusError = true;
+            return;
+          }
+          try {
+            const res = await fetch("/login", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(this.loginForm),
+            });
+            if (!res.ok) {
+              const txt = await res.text();
+              this.loginStatus = "Login failed: " + txt;
+              this.loginStatusError = true;
+              this.saveToken("");
+              this.state = {};
+              return;
+            }
+            const data = await res.json();
+            this.saveToken(data.token);
+            this.loginStatus = "Logged in.";
+            this.loginStatusError = false;
+            this.loginForm.password = "";
+            this.startPolling();
+            this.refreshState();
+            this.refreshLogs();
+            this.refreshFiles();
+          } catch (e) {
+            this.loginStatus = "Login error: " + e;
+            this.loginStatusError = true;
+          }
+        },
+        async logout() {
+          if (this.token) {
+            try {
+              await fetch("/logout", {
+                method: "POST",
+                headers: this.apiHeaders(false),
+              });
+            } catch (e) {
+              console.warn("logout error", e);
+            }
+          }
+          this.saveToken("");
+          this.state = {};
+          this.logs = [];
+          this.playlistOrder = [];
+          this.trackDurations = [];
+          if (this._pollTimer) {
+            clearInterval(this._pollTimer);
+            this._pollTimer = null;
+          }
+        },
+        async send(path, method = "POST", body = null) {
+          if (!this.token) {
+            alert("You must login first.");
+            return;
+          }
+          const opt = {
+            method,
+            headers: this.apiHeaders(!!body),
+          };
+          if (body) opt.body = JSON.stringify(body);
+          try {
+            const res = await fetch(path, opt);
+            if (!res.ok) {
+              const msg = await res.text();
+              alert("Request failed: " + res.status + " " + msg);
+            }
+          } catch (e) {
+            alert("Network error: " + e);
+          }
+          this.refreshState();
+        },
+        async refreshState() {
+          if (!this.token) return;
+          try {
+            const res = await fetch("/state", {
+              headers: this.apiHeaders(false),
+            });
+            if (!res.ok) {
+              this.state = { error: "HTTP " + res.status };
+              return;
+            }
+            const data = await res.json();
+            this.state = data || {};
+            // hydrate UI fields from state, but don't clobber what user is typing
+            if (!this.editing.rtmp && data.rtmp_url) {
+              this.rtmp = data.rtmp_url;
+            }
+            if (!this.editing.ffmpeg && data.ffmpeg_path) {
+              this.ffmpegPath = data.ffmpeg_path;
+            }
+            if (!this.editing.overlay && data.overlay_text !== undefined) {
+              this.overlay = data.overlay_text || "";
+            }
+            this.video = data.video_file || this.video;
+
+            // playlist & durations
+            if (Array.isArray(data.playlist)) {
+              this.playlistOrder = data.playlist.slice();
+            } else {
+              this.playlistOrder = [];
+            }
+            if (Array.isArray(data.track_durations)) {
+              this.trackDurations = data.track_durations.slice();
+            } else {
+              this.trackDurations = [];
+            }
+
+            // time bar max based on current track duration if known
+            const d = this.currentDurationSec;
+            this.timeBarMax = d && d > 0 ? Math.floor(d) : 0;
+
+            // keep slider in sync with current position (per-track)
+            if (!this.seeking) {
+              this.seekSlider = Math.max(0, Math.floor(data.position_sec || 0));
+            }
+            // if we know track length, don't let slider go past it
+            if (this.timeBarMax && this.seekSlider > this.timeBarMax) {
+              this.seekSlider = this.timeBarMax;
+            }
+          } catch (e) {
+            this.state = { error: String(e) };
+          }
+        },
+        async refreshLogs() {
+          if (!this.token) return;
+          try {
+            const res = await fetch("/logs?limit=200", {
+              headers: this.apiHeaders(false),
+            });
+            if (!res.ok) {
+              return;
+            }
+            const data = await res.json();
+            this.logs = data.lines || [];
+          } catch (e) {
+            console.warn("log fetch error", e);
+          }
+        },
+        async refreshFiles() {
+          if (!this.token) return;
+          try {
+            const [ra, rv] = await Promise.all([
+              fetch("/files/audio", { headers: this.apiHeaders(false) }),
+              fetch("/files/video", { headers: this.apiHeaders(false) }),
+            ]);
+            if (ra.ok) {
+              const da = await ra.json();
+              this.audioFilesList = da.files || [];
+            }
+            if (rv.ok) {
+              const dv = await rv.json();
+              this.videoFilesList = dv.files || [];
+            }
+          } catch (e) {
+            console.warn("file list error", e);
+          }
+        },
+        setRTMP() {
+          if (!this.rtmp) return;
+          this.send("/rtmp", "POST", { url: this.rtmp });
+        },
+        setFFMPEG() {
+          if (!this.ffmpegPath) return;
+          this.send("/ffmpeg", "POST", { path: this.ffmpegPath });
+        },
+        setOverlay() {
+          this.send("/overlay", "POST", { text: this.overlay || "" });
+        },
+        seekPrompt() {
+          const sec = prompt("Seek to seconds from start of track:");
+          if (sec === null) return;
+          const v = parseFloat(sec);
+          if (isNaN(v)) return;
+          this.send("/seek", "POST", { seconds: v });
+        },
+        commitSeek() {
+          this.seeking = false;
+          const v = Number(this.seekSlider) || 0;
+          this.send("/seek", "POST", { seconds: v });
+        },
+        // Playlist: save order to server
+        savePlaylistOrder() {
+          const files = this.playlistOrder.slice();
+          this.send("/playlist/order", "POST", { files });
+        },
+        // Append from file manager
+        appendToPlaylist(path) {
+          const current = this.playlistOrder ? this.playlistOrder.slice() : [];
+          current.push(path);
+          this.playlistOrder = current;
+          this.savePlaylistOrder();
+        },
+        setVideoFromFile(path) {
+          this.video = path;
+          this.send("/video", "POST", { path: this.video });
+        },
+        // Drag & drop handlers
+        onDragStart(idx) {
+          this.dragIndex = idx;
+        },
+        onDrop(idx) {
+          if (this.dragIndex === null || this.dragIndex === idx) return;
+          const arr = this.playlistOrder.slice();
+          const [moved] = arr.splice(this.dragIndex, 1);
+          arr.splice(idx, 0, moved);
+          this.playlistOrder = arr;
+          this.dragIndex = null;
+        },
+        playIndex(idx) {
+          this.send("/play_index", "POST", { index: idx });
+        },
+        // Uploads
+        async uploadAudioFiles() {
+          if (!this.token) {
+            alert("Login first.");
+            return;
+          }
+          const input = this.$refs.audioFiles;
+          if (!input || !input.files || !input.files.length) {
+            alert("Select one or more audio files first.");
+            return;
+          }
+          const addedPaths = [];
+          for (const file of input.files) {
+            const form = new FormData();
+            form.append("file", file);
+            try {
+              const res = await fetch("/upload/audio", {
+                method: "POST",
+                headers: { Authorization: "Bearer " + this.token },
+                body: form,
+              });
+              if (!res.ok) {
+                const msg = await res.text();
+                alert("Upload failed for " + file.name + ": " + msg);
+                continue;
+              }
+              const data = await res.json();
+              if (data.path) {
+                addedPaths.push(data.path);
+              }
+            } catch (e) {
+              alert("Upload error for " + file.name + ": " + e);
+            }
+          }
+          if (addedPaths.length) {
+            const current = this.playlistOrder ? this.playlistOrder.slice() : [];
+            this.playlistOrder = [...current, ...addedPaths];
+            this.savePlaylistOrder();
+            this.refreshFiles();
+          }
+          input.value = "";
+        },
+        async uploadVideoFile() {
+          if (!this.token) {
+            alert("Login first.");
+            return;
+          }
+          const input = this.$refs.videoFile;
+          if (!input || !input.files || !input.files.length) {
+            alert("Select a video file first.");
+            return;
+          }
+          const file = input.files[0];
+          const form = new FormData();
+          form.append("file", file);
+          try {
+            const res = await fetch("/upload/video", {
+              method: "POST",
+              headers: { Authorization: "Bearer " + this.token },
+              body: form,
+            });
+            if (!res.ok) {
+              const msg = await res.text();
+              alert("Upload failed: " + msg);
+              return;
+            }
+            const data = await res.json();
+            if (data.path) {
+              this.video = data.path;
+              this.send("/video", "POST", { path: this.video });
+              this.refreshFiles();
+            }
+          } catch (e) {
+            alert("Upload error: " + e);
+          }
+          input.value = "";
+        },
+        startPolling() {
+          if (this._pollTimer) return;
+          this._pollTimer = setInterval(() => {
+            if (!this.token) return;
+            this.refreshState();
+            this.refreshLogs();
+          }, 6000);
+        },
+      },
+      mounted() {
+        if (this.token) {
+          this.startPolling();
+          this.refreshState();
+          this.refreshLogs();
+          this.refreshFiles();
+        }
+      },
+    }).mount("#app");
+  </script>
+</body>
+</html>
+
+</html>
