@@ -71,46 +71,39 @@ class EncoderMixin:
         cmd = [
             self.ffmpeg_path,
             "-hide_banner",
-            "-loglevel",
-            "warning",
-            "-analyzeduration", "5M",
-            "-probesize", "5M",
+            "-loglevel", "warning",
             "-nostdin",
+
             # Audio from stdin (raw PCM)
-            "-f",
-            "s16le",
-            "-ar",
-            "48000",
-            "-ac",
-            "2",
-            "-i",
-            "pipe:0",
-            # Video from Stream B over UDP
-            "-i",
-            self.video_udp_url,
+            "-f", "s16le",
+            "-ar", "48000",
+            "-ac", "2",
+            "-i", "pipe:0",
+
+            # ⚠️ IMPORTANT: help ffmpeg handle the UDP H.264 TS stream
+            "-fflags", "+nobuffer+genpts",
+            "-analyzeduration", "10M",
+            "-probesize", "10M",
+
+            # Video from Stream B over UDP (MPEG-TS)
+            "-f", "mpegts",
+            "-i", self.video_udp_url,
+
             # Encoding / muxing settings
-            "-c:v",
-            "copy",  # video is already H.264 from Stream B
-            "-c:a",
-            "aac",
-            "-b:a",
-            self.audio_bitrate,
-            "-b:v",
-            self.video_bitrate,
-            "-maxrate",
-            self.maxrate,
-            "-bufsize",
-            self.bufsize,
-            "-threads",
-            "1",
+            "-c:v", "copy",          # video is already H.264 from Stream B
+            "-c:a", "aac",
+            "-b:a", self.audio_bitrate,
+            "-b:v", self.video_bitrate,
+            "-maxrate", self.maxrate,
+            "-bufsize", self.bufsize,
+            "-threads", "1",
+
             # Map video from UDP and audio from stdin
-            "-map",
-            "1:v:0",
-            "-map",
-            "0:a:0",
+            "-map", "1:v:0",
+            "-map", "0:a:0",
+
             # Output to RTMP
-            "-f",
-            "flv",
+            "-f", "flv",
             self.rtmp_url,
         ]
 
