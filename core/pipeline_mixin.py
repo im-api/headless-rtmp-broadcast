@@ -25,9 +25,9 @@ class PipelineMixin:
             self._append_log("Cannot start pipeline: empty playlist")
             return
 
-        # (re)start Stream B video, then Stream C encoder
-        if hasattr(self, "_start_video_unlocked"):
-            self._start_video_unlocked()
+        # # (re)start Stream B video, then Stream C encoder
+        # if hasattr(self, "_start_video_unlocked"):
+        #     self._start_video_unlocked()
         self._start_encoder_unlocked()
         time.sleep(1.5)        
         self._start_video_unlocked()
