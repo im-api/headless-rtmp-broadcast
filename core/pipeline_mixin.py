@@ -26,8 +26,9 @@ class PipelineMixin:
             return
 
         # (re)start Stream B video, then Stream C encoder
-        if hasattr(self, "_start_encoder_unlocked"):
-            self._start_encoder_unlocked()
+        #if hasattr(self, "_start_encoder_unlocked"):
+        self._start_encoder_unlocked()
+        time.sleep(1000)
         self._start_video_unlocked()
 
         # Start or restart audio decoder for the current track
