@@ -28,9 +28,6 @@ class PipelineMixin:
         # # (re)start Stream B video, then Stream C encoder
         # if hasattr(self, "_start_video_unlocked"):
         #     self._start_video_unlocked()
-        self._start_encoder_unlocked()
-        self._append_log("waiting 5 sec before starting stream b and a")
-        time.sleep(5)        
         self._start_video_unlocked()
 
         # Start or restart audio decoder for the current track
@@ -38,6 +35,9 @@ class PipelineMixin:
         self.last_start_monotonic = time.monotonic()
         self.position_sec = max(0.0, start_sec)
         self.status = "playing"
+        
+        self._start_encoder_unlocked()
+        
 
     def _restart_full_pipeline_unlocked(self, start_sec: float = 0.0) -> None:
         """
