@@ -73,6 +73,8 @@ class EncoderMixin:
             "-hide_banner",
             "-loglevel",
             "warning",
+            "-analyzeduration", "5M",
+            "-probesize", "5M",
             "-nostdin",
             # Audio from stdin (raw PCM)
             "-f",
@@ -84,8 +86,6 @@ class EncoderMixin:
             "-i",
             "pipe:0",
             # Video from Stream B over UDP
-            "-analyzeduration", "50M",
-            "-probesize", "50M",
             "-i",
             self.video_udp_url,
             # Encoding / muxing settings
