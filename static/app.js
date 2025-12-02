@@ -95,7 +95,11 @@ token: localStorage.getItem("musicbot_session_token") || "",
           if (!this.playlistOrder || !this.playlistOrder.length) return "";
           const p = this.playlistOrder[idx];
           if (!p) return "";
-          return this.basename(p);
+          // Use the stem before the first "_" as the human-friendly title,
+          // e.g. "firefly_120bpm.mp3" -> "firefly"
+          const base = this.basename(p);
+          const stem = base.replace(/\.[^/.]+$/, "");
+          return stem.split("_", 1)[0] || base;
         },
         formattedPosition() {
           const sec = Math.floor(this.state.position_sec || 0);
@@ -140,6 +144,8 @@ token: localStorage.getItem("musicbot_session_token") || "",
         this.savePlaylistOrder();
       },
       async deleteAudioFile(f) {
+        const ok = window.confirm(`Delete audio file "${f.name}" from disk?`);
+        if (!ok) return;
         await this.send("/files/audio/delete", "POST", { path: f.path });
         if (Array.isArray(this.playlistOrder)) {
           this.playlistOrder = this.playlistOrder.filter((p) => p !== f.path);
@@ -148,6 +154,8 @@ token: localStorage.getItem("musicbot_session_token") || "",
         await this.refreshFiles();
       },
       async deleteVideoFile(f) {
+        const ok = window.confirm(`Delete video file "${f.name}" from disk?`);
+        if (!ok) return;
         await this.send("/files/video/delete", "POST", { path: f.path });
         if (this.video === f.path) {
           this.video = "";
@@ -417,6 +425,8 @@ basename(p) {
           arr.splice(idx, 0, moved);
           this.playlistOrder = arr;
           this.dragIndex = null;
+          // Persist new order immediately so backend indices match what the UI shows.
+          this.savePlaylistOrder();
         },
         playIndex(idx) {
           this.send("/play_index", "POST", { index: idx });

@@ -23,7 +23,26 @@ class BaseState:
         self.video_file: Optional[Path] = None
         self.overlay_text: str = ""
         self.rtmp_url: str = default_rtmp
+
+        # Small text files used by ffmpeg drawtext for overlay and "now playing"
+        # text. These let the UI update text live without restarting the encoder
+        # (the encoder uses drawtext=textfile=...:reload=1).
+        self.overlay_text_file: Path = Path(os.path.join(os.path.dirname(__file__), "..", "overlay_text.txt")).resolve()
+        self.now_playing_file: Path = Path(os.path.join(os.path.dirname(__file__), "..", "now_playing.txt")).resolve()
+        try:
+            self.overlay_text_file.write_text("", encoding="utf-8")
+            self.now_playing_file.write_text("", encoding="utf-8")
+        except Exception:
+            # If the filesystem is read-only or unavailable, fail softly.
+            pass
         self.ffmpeg_path: str = os.getenv("FFMPEG_PATH", "ffmpeg")
+        # Video transport between Stream B (video+overlays) and Stream C (encoder).
+        # Stream B pushes H.264 video to this UDP endpoint; Stream C reads from it.
+        self.video_udp_url: str = os.getenv("VIDEO_UDP_URL", "udp://127.0.0.1:12345")
+
+        # Separate ffmpeg process for Stream B (video + overlays)
+        self.video_proc: Optional[subprocess.Popen] = None
+        self._video_log_thread: Optional[threading.Thread] = None
         # encoder quality settings (UI-configurable)
         self.audio_bitrate: str = "320k"
         self.video_bitrate: str = "800k"
@@ -61,4 +80,3 @@ class BaseState:
 
 
     # ---------- logging helpers ----------
-

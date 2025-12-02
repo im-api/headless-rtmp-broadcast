@@ -36,6 +36,17 @@ class AudioMixin:
 
         audio_file = self.playlist[self.current_index]
 
+        # Update the "Now Playing" overlay text file based on the file name.
+        # Example: "firefly_120bpm.mp3" -> "firefly".
+        now_file = getattr(self, "now_playing_file", None)
+        if now_file is not None:
+            try:
+                stem = Path(audio_file).stem
+                now_text = stem.split("_", 1)[0] if stem else ""
+                now_file.write_text(now_text, encoding="utf-8")
+            except Exception as e:
+                self._append_log(f"Failed to write now_playing_file: {e!r}")
+
         if self.encoder_proc is None or self.encoder_proc.poll() is not None:
             self._append_log("Encoder is not running; cannot start audio decoder")
             return
@@ -137,7 +148,3 @@ class AudioMixin:
             except BrokenPipeError:
                 # Encoder died or RTMP closed
                 break
-            except BrokenPipeError:
-                    # Encoder died or RTMP closed
-                    break
-

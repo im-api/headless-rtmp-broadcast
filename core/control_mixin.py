@@ -4,33 +4,46 @@ import time
 
 class ControlMixin:
     def set_video(self, path: str) -> None:
+        """Set the video loop file and (if playing) restart only Stream B.
+
+        Stream C (RTMP encoder) keeps running and continues to read video
+        over UDP. Restarting Stream B briefly interrupts the video source,
+        but the RTMP connection remains alive.
+        """
         with self.lock:
             self.video_file = Path(path)
             self._append_log(f"Video set to {self.video_file}")
-            # Changing the video loop requires restarting the encoder.
-            if self.status == "playing":
-                pos = self._get_position_unlocked()
-                self._restart_full_pipeline_unlocked(pos)
-
+            if self.status == "playing" and hasattr(self, "_kill_video_unlocked"):
+                try:
+                    self._kill_video_unlocked()
+                    self._start_video_unlocked()
+                except Exception as e:
+                    self._append_log(f"Failed to restart Stream B after set_video: {e!r}")
     def set_overlay_text(self, text: str) -> None:
+        """Update overlay text without restarting the encoder.
+
+        The encoder uses a textfile-based drawtext filter (reload=1), so we only
+        need to update the small overlay text file on disk. Stream C keeps running.
+        """
         with self.lock:
-            self.overlay_text = text
+            self.overlay_text = text or ""
             self._append_log(f"Overlay text set to: {self.overlay_text!r}")
-            # Updating overlay also requires restarting the encoder.
-            if self.status == "playing":
-                pos = self._get_position_unlocked()
-                self._restart_full_pipeline_unlocked(pos)
+            overlay_path = getattr(self, "overlay_text_file", None)
+            if overlay_path is not None:
+                try:
+                    overlay_path.write_text(self.overlay_text, encoding="utf-8")
+                except Exception as e:
+                    self._append_log(f"Failed to write overlay_text_file: {e!r}")
 
     def set_rtmp(self, url: str) -> None:
         with self.lock:
             self.rtmp_url = url
             self._append_log(f"RTMP URL set to: {self.rtmp_url}")
-            # Changing RTMP target requires a fresh encoder.
+            # Changing RTMP target still requires restarting the pipeline so that
+            # ffmpeg reconnects to the new RTMP endpoint.
             if self.status == "playing":
                 pos = self._get_position_unlocked()
                 self._restart_full_pipeline_unlocked(pos)
-            if self.status == "playing":
-                self._start_ffmpeg_unlocked(self._get_position_unlocked())
 
     def set_ffmpeg_path(self, path: str) -> None:
         with self.lock:
@@ -180,4 +193,3 @@ class ControlMixin:
                 f"maxrate={self.maxrate}, bufsize={self.bufsize}, "
                 f"fps={self.video_fps}"
             )
-

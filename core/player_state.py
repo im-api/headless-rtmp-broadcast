@@ -10,6 +10,7 @@ from .base_state import BaseState
 from .logging_mixin import LoggingMixin
 from .durations_mixin import DurationsMixin
 from .legacy_cmd_mixin import LegacyCmdMixin
+from .video_mixin import VideoMixin
 from .encoder_mixin import EncoderMixin
 from .audio_mixin import AudioMixin
 from .pipeline_mixin import PipelineMixin
@@ -23,6 +24,7 @@ class PlayerState(
     LoggingMixin,
     DurationsMixin,
     LegacyCmdMixin,
+    VideoMixin,
     EncoderMixin,
     AudioMixin,
     PipelineMixin,
