@@ -100,6 +100,8 @@ class VideoMixin:
             "-hide_banner",
             "-loglevel",
             "warning",
+            "-analyzeduration", "10M",
+            "-probesize", "10M",
             "-re",
             "-stream_loop",
             "-1",
