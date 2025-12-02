@@ -160,6 +160,10 @@ class ControlMixin:
                 "maxrate": self.maxrate,
                 "bufsize": self.bufsize,
                 "video_fps": self.video_fps,
+                # Process health flags
+                "audio_alive": bool(getattr(self, "audio_proc", None) and getattr(self, "audio_proc").poll() is None),
+                "video_alive": bool(getattr(self, "video_proc", None) and getattr(self, "video_proc").poll() is None),
+                "encoder_alive": bool(self.encoder_proc is not None and self.encoder_proc.poll() is None),
             }
 
     def set_encoder_settings(self, cfg: dict) -> None:

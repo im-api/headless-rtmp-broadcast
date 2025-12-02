@@ -1,0 +1,11 @@
+[
+  {
+    "name": "General",
+    "url": "rtmp://rtmp.cdn.asset.aparat.com:443/event/e2b3db323716cd6460ff3add043e4904d?s=e226be4cf7715ce0",
+    "audio_bitrate": "320k",
+    "video_bitrate": "800k",
+    "maxrate": "800k",
+    "bufsize": "1600k",
+    "video_fps": 24
+  }
+]

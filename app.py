@@ -15,6 +15,35 @@ RTMP music bot with secure web UI (Flask + Tailwind + Vue).
 import os
 import json
 from pathlib import Path
+
+PROFILES_PATH = Path(__file__).with_name("rtmp_profiles.json")
+
+
+def _load_rtmp_profiles():
+    """Load saved RTMP profiles from disk.
+
+    Profiles are stored as a list of dicts:
+    {"name": str, "url": str, "audio_bitrate": str, "video_bitrate": str,
+     "maxrate": str, "bufsize": str, "video_fps": int}
+    """
+    try:
+        if PROFILES_PATH.exists():
+            with PROFILES_PATH.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                return data
+    except Exception:
+        pass
+    return []
+
+
+def _save_rtmp_profiles(profiles):
+    try:
+        with PROFILES_PATH.open("w", encoding="utf-8") as f:
+            json.dump(profiles, f, indent=2)
+    except Exception:
+        pass
+
 import secrets
 import threading
 from typing import Set
@@ -185,7 +214,10 @@ def logout():
 def get_state():
     if not _require_session():
         return _unauthorized()
-    return jsonify(player_state.get_state())
+    state = player_state.get_state()
+    # Attach RTMP profiles (if any)
+    state["rtmp_profiles"] = _load_rtmp_profiles()
+    return jsonify(state)
 
 
 @app.get("/logs")
@@ -292,6 +324,86 @@ def set_ffmpeg():
     save_config()
     return jsonify({"ok": True, "ffmpeg_path": path})
 
+
+
+@app.get("/profiles")
+def list_profiles():
+    if not _require_session():
+        return _unauthorized()
+    return jsonify({"profiles": _load_rtmp_profiles()})
+
+
+@app.post("/profiles/save")
+def save_profile():
+    if not _require_session():
+        return _unauthorized()
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"detail": "name is required"}), 400
+    profiles = _load_rtmp_profiles()
+    # Build profile using explicit values if provided, otherwise current state
+    profile = {
+        "name": name,
+        "url": data.get("url") or player_state.rtmp_url,
+        "audio_bitrate": data.get("audio_bitrate") or player_state.audio_bitrate,
+        "video_bitrate": data.get("video_bitrate") or player_state.video_bitrate,
+        "maxrate": data.get("maxrate") or player_state.maxrate,
+        "bufsize": data.get("bufsize") or player_state.bufsize,
+        "video_fps": data.get("video_fps") or player_state.video_fps,
+    }
+    replaced = False
+    for idx, p in enumerate(profiles):
+        if p.get("name") == name:
+            profiles[idx] = profile
+            replaced = True
+            break
+    if not replaced:
+        profiles.append(profile)
+    _save_rtmp_profiles(profiles)
+    return jsonify({"ok": True, "profiles": profiles})
+
+
+@app.post("/profiles/delete")
+def delete_profile():
+    if not _require_session():
+        return _unauthorized()
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"detail": "name is required"}), 400
+    profiles = [p for p in _load_rtmp_profiles() if p.get("name") != name]
+    _save_rtmp_profiles(profiles)
+    return jsonify({"ok": True, "profiles": profiles})
+
+
+@app.post("/profiles/apply")
+def apply_profile():
+    if not _require_session():
+        return _unauthorized()
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"detail": "name is required"}), 400
+    profiles = _load_rtmp_profiles()
+    profile = next((p for p in profiles if p.get("name") == name), None)
+    if not profile:
+        return jsonify({"detail": "profile not found"}), 404
+    # Apply to player_state: RTMP URL and encoder settings
+    with player_state.lock:
+        url = profile.get("url")
+        if url:
+            player_state.set_rtmp(url)
+        enc_cfg = {
+            "audio_bitrate": profile.get("audio_bitrate", player_state.audio_bitrate),
+            "video_bitrate": profile.get("video_bitrate", player_state.video_bitrate),
+            "maxrate": profile.get("maxrate", player_state.maxrate),
+            "bufsize": profile.get("bufsize", player_state.bufsize),
+            "video_fps": profile.get("video_fps", player_state.video_fps),
+        }
+        player_state.set_encoder_settings(enc_cfg)
+        save_config()
+    return jsonify({"ok": True, "profile": profile})
 
 @app.post("/play")
 def play():

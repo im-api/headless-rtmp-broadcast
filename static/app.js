@@ -36,6 +36,11 @@ token: localStorage.getItem("musicbot_session_token") || "",
           // Playlist visual order & durations
           playlistOrder: [],
           trackDurations: [],
+          // RTMP profiles
+          rtmpProfiles: [],
+          rtmpProfileName: "",
+          rtmpProfileSelected: "",
+
 
           // Fetched player state
           state: {},
@@ -89,6 +94,15 @@ token: localStorage.getItem("musicbot_session_token") || "",
           if (s === "paused") return "bg-amber-400";
           if (s === "stopped") return "bg-slate-400";
           return "bg-slate-500";
+        },
+        audioAlive() {
+          return !!this.state.audio_alive;
+        },
+        videoAlive() {
+          return !!this.state.video_alive;
+        },
+        encoderAlive() {
+          return !!this.state.encoder_alive;
         },
         currentTrackDisplay() {
           const idx = this.state.current_track_index || 0;
@@ -312,6 +326,10 @@ basename(p) {
             if (typeof data.video_fps === "number") {
               this.encoderSettings.video_fps = data.video_fps;
             }
+            // RTMP profiles (if provided)
+            if (Array.isArray(data.rtmp_profiles)) {
+              this.rtmpProfiles = data.rtmp_profiles;
+            }
 
             // playlist & durations
             if (Array.isArray(data.playlist)) {
@@ -385,6 +403,44 @@ basename(p) {
         },
         setOverlay() {
           this.send("/overlay", "POST", { text: this.overlay || "" });
+        },
+        async saveRtmpProfile() {
+          const name = (this.rtmpProfileName || "").trim();
+          if (!name) {
+            alert("Enter a profile name first.");
+            return;
+          }
+          const payload = {
+            name,
+            url: this.state.rtmp_url || this.rtmp,
+            audio_bitrate: this.encoderSettings.audio_bitrate,
+            video_bitrate: this.encoderSettings.video_bitrate,
+            maxrate: this.encoderSettings.maxrate,
+            bufsize: this.encoderSettings.bufsize,
+            video_fps: this.encoderSettings.video_fps,
+          };
+          const res = await this.send("/profiles/save", "POST", payload);
+          if (res && Array.isArray(res.profiles)) {
+            this.rtmpProfiles = res.profiles;
+          }
+        },
+        async applyRtmpProfile() {
+          const name = (this.rtmpProfileSelected || "").trim();
+          if (!name) return;
+          await this.send("/profiles/apply", "POST", { name });
+          await this.refreshState();
+        },
+        async deleteRtmpProfile() {
+          const name = (this.rtmpProfileSelected || "").trim();
+          if (!name) return;
+          if (!confirm(`Delete profile "${name}"?`)) return;
+          const res = await this.send("/profiles/delete", "POST", { name });
+          if (res && Array.isArray(res.profiles)) {
+            this.rtmpProfiles = res.profiles;
+            if (this.rtmpProfileSelected === name) {
+              this.rtmpProfileSelected = "";
+            }
+          }
         },
         seekPrompt() {
           const sec = prompt("Seek to seconds from start of track:");
