@@ -188,3 +188,5 @@ uploads/video/*
 .qodo
 headless-rtmp-broadcast.zip
 config.json
+overlay_text.txt
+now_playing.txt
