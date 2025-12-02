@@ -45,6 +45,28 @@ def _save_rtmp_profiles(profiles):
     except Exception:
         pass
 
+SCENES_PATH = Path(__file__).with_name("scenes.json")
+
+
+def _load_scenes():
+    try:
+        if SCENES_PATH.exists():
+            with SCENES_PATH.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                return data
+    except Exception:
+        pass
+    return []
+
+
+def _save_scenes(scenes):
+    try:
+        with SCENES_PATH.open("w", encoding="utf-8") as f:
+            json.dump(scenes, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
 import secrets
 import threading
 from typing import Set
@@ -298,6 +320,98 @@ def set_overlay():
     player_state.set_overlay_text(text)
     save_config()
     return jsonify({"ok": True, "text": text})
+
+@app.post("/overlay_flags")
+def overlay_flags():
+    if not _require_session():
+        return _unauthorized()
+    data = request.get_json(silent=True) or {}
+    overlay_enabled = data.get("overlay_enabled")
+    now_playing_enabled = data.get("now_playing_enabled")
+    player_state.set_overlay_flags(
+        overlay_enabled=overlay_enabled, now_playing_enabled=now_playing_enabled
+    )
+    save_config()
+    return jsonify({"ok": True, "overlay_enabled": bool(overlay_enabled) if overlay_enabled is not None else getattr(player_state, "overlay_enabled", True),
+                    "now_playing_enabled": bool(now_playing_enabled) if now_playing_enabled is not None else getattr(player_state, "now_playing_enabled", True)})
+
+
+@app.post("/queue_settings")
+def queue_settings():
+    if not _require_session():
+        return _unauthorized()
+    data = request.get_json(silent=True) or {}
+    auto_dj = data.get("auto_dj")
+    loop_queue = data.get("loop_queue")
+    player_state.set_queue_settings(auto_dj=auto_dj, loop_queue=loop_queue)
+    save_config()
+    return jsonify({"ok": True, "auto_dj": getattr(player_state, "auto_dj", False), "loop_queue": getattr(player_state, "loop_queue", True)})
+
+
+@app.get("/scenes")
+def get_scenes():
+    if not _require_session():
+        return _unauthorized()
+    scenes = _load_scenes()
+    return jsonify({"scenes": scenes})
+
+
+@app.post("/scenes/save")
+def save_scene():
+    if not _require_session():
+        return _unauthorized()
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"detail": "name is required"}), 400
+    scenes = _load_scenes()
+    scenes = [s for s in scenes if s.get("name") != name]
+    scenes.append({
+        "name": name,
+        "video": str(player_state.video_file) if player_state.video_file else None,
+        "overlay": getattr(player_state, "overlay_text", ""),
+        "overlay_enabled": getattr(player_state, "overlay_enabled", True),
+        "now_playing_enabled": getattr(player_state, "now_playing_enabled", True),
+    })
+    _save_scenes(scenes)
+    return jsonify({"ok": True, "scenes": scenes})
+
+
+@app.post("/scenes/apply")
+def apply_scene():
+    if not _require_session():
+        return _unauthorized()
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    scenes = _load_scenes()
+    scene = next((s for s in scenes if s.get("name") == name), None)
+    if not scene:
+        return jsonify({"detail": "scene not found"}), 404
+    video = scene.get("video")
+    overlay = scene.get("overlay")
+    if video:
+        player_state.set_video(video)
+    if overlay is not None:
+        player_state.set_overlay_text(overlay)
+    player_state.set_overlay_flags(
+        overlay_enabled=scene.get("overlay_enabled"),
+        now_playing_enabled=scene.get("now_playing_enabled"),
+    )
+    save_config()
+    return jsonify({"ok": True})
+
+
+@app.post("/scenes/delete")
+def delete_scene():
+    if not _require_session():
+        return _unauthorized()
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    scenes = _load_scenes()
+    new_scenes = [s for s in scenes if s.get("name") != name]
+    _save_scenes(new_scenes)
+    return jsonify({"ok": True, "scenes": new_scenes})
+
 
 
 @app.post("/rtmp")

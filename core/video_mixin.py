@@ -102,6 +102,8 @@ class VideoMixin:
             "warning",
             "-re",
             "-stream_loop",
+            "-analyzeduration", "100M",
+            "-probesize", "100M",
             "-1",
             "-i",
             str(self.video_file),
