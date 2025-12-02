@@ -29,8 +29,7 @@ class PipelineMixin:
         if hasattr(self, "_start_video_unlocked"):
             self._start_video_unlocked()
         self._start_encoder_unlocked()
-        
-        self._kill_video_unlocked()
+        time.sleep(1.5)        
         self._start_video_unlocked()
 
         # Start or restart audio decoder for the current track
