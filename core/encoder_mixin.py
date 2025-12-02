@@ -84,6 +84,8 @@ class EncoderMixin:
             "-i",
             "pipe:0",
             # Video from Stream B over UDP
+            "-analyzeduration", "50M",
+            "-probesize", "50M",
             "-i",
             self.video_udp_url,
             # Encoding / muxing settings
