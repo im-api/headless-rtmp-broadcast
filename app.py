@@ -15,6 +15,7 @@ RTMP music bot with secure web UI (Flask + Tailwind + Vue).
 import os
 import json
 from pathlib import Path
+import subprocess
 
 PROFILES_PATH = Path(__file__).with_name("rtmp_profiles.json")
 
@@ -323,6 +324,64 @@ def set_ffmpeg():
     player_state.set_ffmpeg_path(path)
     save_config()
     return jsonify({"ok": True, "ffmpeg_path": path})
+
+@app.post("/rtmp_test")
+def rtmp_test():
+    """Run a short 5s test push to the configured RTMP URL using color bars + tone."""
+    if not _require_session():
+        return _unauthorized()
+    # Use current ffmpeg path and RTMP URL from player_state
+    ffmpeg_path = player_state.ffmpeg_path or "ffmpeg"
+    url = player_state.rtmp_url
+    if not url:
+        return jsonify({"ok": False, "detail": "RTMP URL is not set"}), 400
+    cmd = [
+        ffmpeg_path,
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-re",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc=size=1280x720:rate=24",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=1000:sample_rate=48000",
+        "-t",
+        "5",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-tune",
+        "zerolatency",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-f",
+        "flv",
+        url,
+    ]
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=20
+        )
+    except Exception as exc:  # pragma: no cover - diagnostic path
+        return jsonify({"ok": False, "detail": str(exc)}), 500
+    stderr = (proc.stderr or "").splitlines()[-25:]  # last few lines only
+    return jsonify(
+        {
+            "ok": proc.returncode == 0,
+            "exit_code": proc.returncode,
+            "stderr": "\n".join(stderr),
+        }
+    )
+
 
 
 

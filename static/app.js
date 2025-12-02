@@ -3,7 +3,6 @@ const { createApp, computed } = Vue;
     createApp({
       data() {
         return {
-          
           encoderSettings: {
             audio_bitrate: "320k",
             video_bitrate: "800k",
@@ -11,7 +10,7 @@ const { createApp, computed } = Vue;
             bufsize: "1600k",
             video_fps: 24,
           },
-token: localStorage.getItem("musicbot_session_token") || "",
+          token: localStorage.getItem("musicbot_session_token") || "",
           loginForm: {
             username: "",
             password: "",
@@ -36,11 +35,17 @@ token: localStorage.getItem("musicbot_session_token") || "",
           // Playlist visual order & durations
           playlistOrder: [],
           trackDurations: [],
+
           // RTMP profiles
           rtmpProfiles: [],
           rtmpProfileName: "",
           rtmpProfileSelected: "",
 
+          // Library selection
+          audioSelected: [],
+
+          // Encoder preset selector
+          encoderPreset: "",
 
           // Fetched player state
           state: {},
@@ -137,6 +142,39 @@ token: localStorage.getItem("musicbot_session_token") || "",
       },
       methods: {
         
+        applyEncoderPreset() {
+          if (!this.encoderPreset) {
+            return;
+          }
+          if (this.encoderPreset === "aparat_sd") {
+            this.encoderSettings.audio_bitrate = "320k";
+            this.encoderSettings.video_bitrate = "800k";
+            this.encoderSettings.maxrate = "800k";
+            this.encoderSettings.bufsize = "1600k";
+            this.encoderSettings.video_fps = 24;
+          } else if (this.encoderPreset === "youtube_720") {
+            this.encoderSettings.audio_bitrate = "160k";
+            this.encoderSettings.video_bitrate = "2500k";
+            this.encoderSettings.maxrate = "2500k";
+            this.encoderSettings.bufsize = "5000k";
+            this.encoderSettings.video_fps = 30;
+          }
+          this.saveEncoderSettings();
+        },
+        async testRTMP() {
+          const res = await this.send("/rtmp_test", "POST", {});
+          if (!res) return;
+          if (res.ok) {
+            alert("RTMP test succeeded (exit code " + res.exit_code + ")");
+          } else {
+            alert(
+              "RTMP test failed (exit code " +
+                res.exit_code +
+                ")\n\n" +
+                (res.stderr || "")
+            );
+          }
+        },
       async saveEncoderSettings() {
         const payload = {
           audio_bitrate: this.encoderSettings.audio_bitrate,
@@ -453,6 +491,30 @@ basename(p) {
           this.seeking = false;
           const v = Number(this.seekSlider) || 0;
           this.send("/seek", "POST", { seconds: v });
+        },
+        queueAllFromLibrary() {
+          if (!Array.isArray(this.audioFilesList) || !this.audioFilesList.length) {
+            return;
+          }
+          const current = this.playlistOrder ? this.playlistOrder.slice() : [];
+          const paths = this.audioFilesList.map((f) => f.path);
+          this.playlistOrder = current.concat(paths);
+          this.savePlaylistOrder();
+        },
+        queueSelectedFromLibrary() {
+          if (!Array.isArray(this.audioSelected) || !this.audioSelected.length) {
+            return;
+          }
+          const current = this.playlistOrder ? this.playlistOrder.slice() : [];
+          this.playlistOrder = current.concat(this.audioSelected);
+          this.savePlaylistOrder();
+        },
+        async clearPlaylist() {
+          const ok = window.confirm("Clear entire queue?");
+          if (!ok) return;
+          this.playlistOrder = [];
+          await this.send("/playlist", "POST", { files: [] });
+          await this.refreshState();
         },
         // Playlist: save order to server
         savePlaylistOrder() {
