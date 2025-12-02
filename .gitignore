@@ -187,3 +187,4 @@ uploads/video/*
 /uploads/video
 .qodo
 headless-rtmp-broadcast.zip
+config.json

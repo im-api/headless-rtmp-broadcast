@@ -1,7 +1,7 @@
 {
   "rtmp_url": "rtmp://rtmp.cdn.asset.aparat.com:443/event/e2b3db323716cd6460ff3add043e4904d?s=e226be4cf7715ce0",
   "ffmpeg_path": "F:/ffmpeg-8.0.1-essentials_build/bin/ffmpeg.exe",
-  "video_file": "F:\\Focus Music\\headless-rtmp-broadcast\\uploads\\video\\fox-in-autumn-woods.1920x1080.mp4",
+  "video_file": "F:\\Focus Music\\headless-rtmp-broadcast\\uploads\\video\\purple-cat-and-planets.1920x1080.mp4",
   "overlay_text": "Test | 24/7 Electronic Focus.\n",
   "playlist": [
     "F:\\Focus Music\\headless-rtmp-broadcast\\uploads\\audio\\Apparition_Relax_Chill_Electronic_15_128bpm_Nrmlzd2_VBR5.mp3",
