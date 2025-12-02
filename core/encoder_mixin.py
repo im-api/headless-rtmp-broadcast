@@ -82,8 +82,6 @@ class EncoderMixin:
 
             # ⚠️ IMPORTANT: help ffmpeg handle the UDP H.264 TS stream
             "-fflags", "+nobuffer+genpts",
-            "-analyzeduration", "10M",
-            "-probesize", "10M",
 
             # Video from Stream B over UDP (MPEG-TS)
             "-f", "mpegts",
