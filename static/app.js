@@ -18,6 +18,13 @@ const { createApp, computed } = Vue;
           loginStatus: "",
           loginStatusError: false,
 
+          // Main navigation tab
+          mainNav: "now",
+
+          // Library header actions menu
+          showLibraryActions: false,
+
+
           // Editing flags to avoid overwriting fields while user types
           editing: {
             rtmp: false,

@@ -160,8 +160,39 @@
 
     <!-- MAIN DASHBOARD -->
     <section v-else class="space-y-5">
+      <!-- Main navigation -->
+      <nav class="flex flex-wrap items-center justify-between gap-2 text-[11px] mb-2">
+        <div class="inline-flex rounded-2xl bg-slate-900/70 border border-slate-700/80 p-1">
+          <button
+            @click="mainNav = 'now'"
+            :class="mainNav === 'now'
+              ? 'px-3 py-1 rounded-2xl bg-emerald-500/90 text-slate-900 font-semibold shadow-sm shadow-emerald-900/50'
+              : 'px-3 py-1 rounded-2xl text-slate-300 hover:bg-slate-800/80'"
+          >
+            Now playing
+          </button>
+          <button
+            @click="mainNav = 'library'"
+            :class="mainNav === 'library'
+              ? 'px-3 py-1 rounded-2xl bg-sky-500/90 text-slate-900 font-semibold shadow-sm shadow-sky-900/50'
+              : 'px-3 py-1 rounded-2xl text-slate-300 hover:bg-slate-800/80'"
+          >
+            Library & queue
+          </button>
+          <button
+            @click="mainNav = 'advanced'"
+            :class="mainNav === 'advanced'
+              ? 'px-3 py-1 rounded-2xl bg-indigo-500/90 text-slate-900 font-semibold shadow-sm shadow-indigo-900/50'
+              : 'px-3 py-1 rounded-2xl text-slate-300 hover:bg-slate-800/80'"
+          >
+            Advanced
+          </button>
+        </div>
+      </nav>
       <!-- Top layout: playback & quick glance -->
-      <div class="grid xl:grid-cols-3 gap-4">
+
+      <!-- Top layout: playback & quick glance -->
+      <div class="grid xl:grid-cols-3 gap-4" v-show="mainNav === 'now' || mainNav === 'advanced'">
         
       <!-- Glass playback card -->
         <div class="xl:col-span-2 relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-700 via-slate-900 to-slate-950 border border-indigo-400/30 shadow-2xl shadow-black/60 p-6 md:p-10 flex flex-col gap-6">
@@ -692,26 +723,38 @@
       </div>
 
       <!-- Bottom row: full library + queue + logs/state -->
-      <div class="grid lg:grid-cols-3 gap-4">
+      <div class="grid lg:grid-cols-3 gap-4" v-show="mainNav === 'library' || mainNav === 'advanced'">
         <!-- Full library -->
         <div class="rounded-3xl bg-slate-900/70 border border-white/10 backdrop-blur-2xl shadow-xl shadow-black/40 p-4 flex flex-col">
           <div class="flex items-center justify-between mb-2">
             <h2 class="text-sm font-semibold text-slate-50">
               Library
             </h2>
-            <button
-              @click="refreshFiles"
-              class="text-[11px] px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-600/60"
-            >
-              ⟳
-            </button>
+            <div class="flex items-center gap-1">
+              <button
+                @click="refreshFiles"
+                class="text-[11px] px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-600/60"
+              >
+                ⟳
+              </button>
+              <button
+                @click="showLibraryActions = !showLibraryActions"
+                class="h-7 w-7 flex items-center justify-center rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-600/60"
+                title="More library actions"
+              >
+                <i class="fa-solid fa-ellipsis-vertical text-[11px]"></i>
+              </button>
+            </div>
           </div>
           <div class="flex-1 grid grid-rows-2 gap-3 text-[11px] overflow-hidden">
             <div class="flex flex-col min-h-[120px]">
               <div class="uppercase tracking-[0.16em] text-[10px] text-slate-400 mb-1">
                 Audio files
               </div>
-              <div class="flex items-center justify-between mb-1 text-[10px] text-slate-300">
+              <div
+            v-if="showLibraryActions"
+            class="flex items-center justify-between mb-1 text-[10px] text-slate-300"
+          >
                 <div class="flex gap-1">
                   <button
                     @click="queueAllFromLibrary"
@@ -761,13 +804,13 @@
                       @click.stop="appendToPlaylist(f.path)"
                       class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px]"
                     >
-                      + Queue
+                      Add to queue
                     </button>
                     <button
                       @click.stop="deleteAudioFile(f)"
                       class="px-1.5 py-0.5 rounded bg-rose-600/80 hover:bg-rose-500/90 text-[10px] text-white"
                     >
-                      Del
+                      Remove from files
                     </button>
                   </div>
                 </div>
@@ -792,7 +835,13 @@
                   <div class="truncate" :title="f.path">
                     {{ f.name }}
                   </div>
-                  <div class="flex items-center gap-1">
+                                    <div class="flex items-center gap-1">
+                    <button
+                      @click.stop="appendToPlaylist(f.path)"
+                      class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px]"
+                    >
+                      Add to queue
+                    </button>
                     <button
                       @click.stop="setVideoFromFile(f.path)"
                       class="px-1.5 py-0.5 rounded bg-pink-500/90 hover:bg-pink-400 text-[10px]"
@@ -803,7 +852,7 @@
                       @click.stop="deleteVideoFile(f)"
                       class="px-1.5 py-0.5 rounded bg-rose-600/80 hover:bg-rose-500/90 text-[10px] text-white"
                     >
-                      Del
+                      Remove from files
                     </button>
                   </div>
                 </div>

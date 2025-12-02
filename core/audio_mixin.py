@@ -129,12 +129,17 @@ class AudioMixin:
                     if getattr(self, "_recent_seek_time", 0.0):
                         if time.monotonic() - self._recent_seek_time < 2.0:
                             recent_seek = True
+                    # A "natural" end-of-track is when the decoder reaches EOF
+                    # while playback is active and we were not in the middle of
+                    # a user-initiated seek.
                     natural_end = (
                         not self._stop_audio_pump
-                        and self.status == "playing"
-                        and self.playlist
+                        and bool(self.playlist)
                         and not recent_seek
                     )
+                    # Once we've checked for a recent seek, clear the marker so
+                    # subsequent tracks are not affected.
+                    self._recent_seek_time = 0.0
                 if natural_end:
                     with self.lock:
                         self._advance_track_unlocked(loop_queue=True)

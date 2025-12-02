@@ -25,17 +25,24 @@ class PlaylistMixin:
             self.current_index = 0
 
         last_index = len(self.playlist) - 1
-        if self.current_index == last_index:
-            if not loop_queue:
-                # End of playlist and looping disabled – stop playback cleanly
-                self._append_log("Reached end of playlist; stopping (no loop)")
-                self._kill_audio_unlocked()
-                self.status = "stopped"
-                self.position_sec = 0.0
-                return
-            next_index = 0
+        at_last = self.current_index == last_index
+
+        if at_last and not loop_queue:
+            # End of playlist and looping disabled – stop playback cleanly
+            self._append_log("Reached end of playlist; stopping (no loop)")
+            self._kill_audio_unlocked()
+            self.status = "stopped"
+            self.position_sec = 0.0
+            return
+
+        if loop_queue:
+            # Wrap around to the beginning when we go past the last track.
+            next_index = (self.current_index + 1) % len(self.playlist)
         else:
+            # No looping: advance by one, but never beyond the last index.
             next_index = self.current_index + 1
+            if next_index > last_index:
+                next_index = last_index
 
         self.current_index = next_index
         self.position_sec = 0.0
@@ -94,4 +101,3 @@ class PlaylistMixin:
                 f"Playlist order updated; length={len(self.playlist)}, current_index={self.current_index}"
             )
             self._update_durations_for_playlist_unlocked()
-
